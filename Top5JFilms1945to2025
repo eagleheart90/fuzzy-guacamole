@@ -1,0 +1,96 @@
+import requests
+import pandas as pd
+import time
+import re
+from letterboxdpy import movie as lb_movie  # Importing the movie module from the library
+
+# --- CONFIGURATION ---
+API_KEY = "TMDB_API_KEY_REMOVED"
+BASE_URL = "https://api.themoviedb.org/3"
+START_YEAR = 1945
+END_YEAR = 2025
+
+def clean_title_for_slug(title):
+    """Converts title to letterboxd-style slug."""
+    slug = re.sub(r'[^a-zA-Z0-9\s-]', '', title.lower()).strip()
+    slug = re.sub(r'\s+', '-', slug)
+    return slug
+
+def get_movie_details(tmdb_id):
+    """Fetches Director and Genres from TMDb."""
+    url = f"{BASE_URL}/movie/{tmdb_id}"
+    params = {"api_key": API_KEY, "append_to_response": "credits"}
+    try:
+        res = requests.get(url, params=params).json()
+        director = "Unknown"
+        if 'credits' in res:
+            for crew in res['credits']['crew']:
+                if crew['job'] == 'Director':
+                    director = crew['name']
+                    break
+        genres = ", ".join([g['name'] for g in res.get('genres', [])])
+        return director, genres
+    except:
+        return "Unknown", "Unknown"
+
+# --- MAIN DATA COLLECTION ---
+all_results = []
+
+print(f"🚀 Starting collection from {START_YEAR} to {END_YEAR}...")
+
+for year in range(START_YEAR, END_YEAR + 1):
+    print(f"📅 Processing year: {year}...", end="\r")
+    
+    # 1. Discover top 5 Japanese movies for the year by popularity
+    discover_url = f"{BASE_URL}/discover/movie"
+    params = {
+        "api_key": API_KEY,
+        "with_original_language": "ja",
+        "primary_release_year": year,
+        "sort_by": "popularity.desc",
+        "page": 1
+    }
+    
+    response = requests.get(discover_url, params=params).json()
+    top_5 = response.get('results', [])[:5]
+    
+    for film in top_5:
+        director, genres = get_movie_details(film['id'])
+        
+        # 2. Use letterboxdpy to get the rating
+        slug = clean_title_for_slug(film['title'])
+        lb_rating = "None" # Default if not found
+        
+        try:
+            # We initialize the Movie object from the library
+            lb_data = lb_movie.Movie(slug)
+            # Access the rating attribute from the library object
+            if lb_data.rating:
+                lb_rating = str(lb_data.rating)
+        except:
+            # If letterboxdpy fails to find the film, it remains "None"
+            pass
+            
+        all_results.append({
+            "Year": year,
+            "Title": film['title'],
+            "Director": director,
+            "Genres": genres,
+            "LB_Rating": lb_rating,
+            "TMDb_Popularity": film['popularity']
+        })
+        
+        # Avoid hitting rate limits
+        time.sleep(0.5)
+
+# --- SAVE RESULTS ---
+df = pd.DataFrame(all_results)
+
+# Sort by year (ascending)
+df = df.sort_values(by="Year")
+
+csv_name = "japanese_top_5_1945_2025.csv"
+df.to_csv(csv_name, index=False)
+
+print(f"\n\n✅ Done! Dataset saved as {csv_name}")
+print(df.head(10))
