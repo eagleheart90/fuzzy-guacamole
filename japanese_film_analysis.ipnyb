@@ -77,26 +77,51 @@ def get_extended_details(tmdb_id):
     genres = [g['name'] for g in res.get('genres', [])]
     return director, ", ".join(genres)
 
-def get_letterboxd_rating(title, year):
+def get_letterboxd_rating(title, year, original_title=None):
     """
-    Scrapes the Letterboxd rating using the title slug.
-    Returns 'N/A' if not found.
+    Improved scraper: Tries English title, then Original title, 
+    and checks multiple HTML locations for the rating.
     """
-    slug = clean_title_for_slug(title)
-    url = f"https://letterboxd.com/film/{slug}/"
+    # Try both titles to increase hit rate
+    titles_to_try = [title]
+    if original_title and original_title != title:
+        titles_to_try.append(original_title)
     
-    try:
-        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            # Letterboxd hides the average rating in a meta tag or specific span
-            meta_rating = soup.find("meta", property="twitter:data2")
-            if meta_rating:
-                return meta_rating["content"].split(" ")[0] # Returns "3.4" from "3.4 out of 5"
-    except:
-        return None
-    return None
+    # Standard headers to look like a real Mac user on Chrome
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
 
+    for t in titles_to_try:
+        slug = clean_title_for_slug(t)
+        url = f"https://letterboxd.com/film/{slug}/"
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=5)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Method A: Check the 'twitter:data2' meta tag (Standard)
+                meta_tag = soup.find("meta", attrs={"name": "twitter:data2"})
+                if meta_tag:
+                    # Example: "3.92 out of 5" -> extract "3.92"
+                    return meta_tag["content"].split(" ")[0]
+                
+                # Method B: Check the structured JSON-LD data (Very Reliable)
+                import json
+                script_tag = soup.find("script", type="application/ld+json")
+                if script_tag:
+                    data = json.loads(script_tag.string)
+                    if 'aggregateRating' in data:
+                        return data['aggregateRating']['ratingValue']
+            
+            # If we get here, it means this specific title/slug didn't work
+            time.sleep(0.5) 
+            
+        except Exception as e:
+            continue
+            
+    return None # Truly not found
 # --- MAIN EXECUTION ---
 
 # 1. Ask User for Year
