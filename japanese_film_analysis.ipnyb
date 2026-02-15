@@ -1,0 +1,143 @@
+import requests
+import pandas as pd
+import time
+import re
+from bs4 import BeautifulSoup
+
+# --- CONFIGURATION ---
+API_KEY = "TMDB_API_KEY_REMOVED"  # <--- PASTE YOUR KEY HERE
+BASE_URL = "https://api.themoviedb.org/3"
+
+# --- HELPER FUNCTIONS ---
+
+def clean_title_for_slug(title):
+    """
+    Converts a title like "Kiki's Delivery Service" to "kikis-delivery-service"
+    to guess the Letterboxd URL.
+    """
+    # Lowercase, remove special chars (keep spaces and hyphens), strip whitespace
+    slug = re.sub(r'[^a-zA-Z0-9\s-]', '', title.lower()).strip()
+    # Replace spaces with hyphens
+    slug = re.sub(r'\s+', '-', slug)
+    return slug
+
+def get_tmdb_movies(year, limit=20):
+    """
+    Fetches the top 'limit' Japanese movies for a specific year from TMDb.
+    """
+    movies_data = []
+    page = 1
+    
+    print(f"🎬 Fetching movies from TMDb for {year}...")
+    
+    while len(movies_data) < limit:
+        url = f"{BASE_URL}/discover/movie"
+        params = {
+            "api_key": API_KEY,
+            "with_original_language": "ja",
+            "primary_release_year": year,
+            "sort_by": "popularity.desc",
+            "page": page
+        }
+        res = requests.get(url, params=params).json()
+        
+        if not res.get('results'):
+            break # No more results
+            
+        for m in res['results']:
+            if len(movies_data) >= limit:
+                break
+            movies_data.append({
+                "tmdb_id": m['id'],
+                "title": m['title'],
+                "original_title": m['original_title'],
+                "release_date": m['release_date'],
+                "tmdb_rating": m['vote_average'],
+                "popularity": m['popularity']
+            })
+        page += 1
+        
+    return movies_data
+
+def get_extended_details(tmdb_id):
+    """
+    Fetches the Director and Genres for a specific movie ID.
+    """
+    url = f"{BASE_URL}/movie/{tmdb_id}"
+    params = {"api_key": API_KEY, "append_to_response": "credits"}
+    res = requests.get(url, params=params).json()
+    
+    director = "Unknown"
+    if 'credits' in res:
+        for crew in res['credits']['crew']:
+            if crew['job'] == 'Director':
+                director = crew['name']
+                break
+                
+    genres = [g['name'] for g in res.get('genres', [])]
+    return director, ", ".join(genres)
+
+def get_letterboxd_rating(title, year):
+    """
+    Scrapes the Letterboxd rating using the title slug.
+    Returns 'N/A' if not found.
+    """
+    slug = clean_title_for_slug(title)
+    url = f"https://letterboxd.com/film/{slug}/"
+    
+    try:
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # Letterboxd hides the average rating in a meta tag or specific span
+            meta_rating = soup.find("meta", property="twitter:data2")
+            if meta_rating:
+                return meta_rating["content"].split(" ")[0] # Returns "3.4" from "3.4 out of 5"
+    except:
+        return None
+    return None
+
+# --- MAIN EXECUTION ---
+
+# 1. Ask User for Year
+target_year = input("Enter the year you want to analyze (e.g., 2001): ")
+num_movies = int(input("How many movies do you want to fetch? (Rec: 20-50 for testing): "))
+
+# 2. Get the Base List
+movies = get_tmdb_movies(target_year, limit=num_movies)
+
+# 3. Loop and Enrich (The ETL Step)
+final_data = []
+
+print(f"\n🚀 Starting enrichment for {len(movies)} movies. This may take a moment...\n")
+
+for i, movie in enumerate(movies):
+    print(f"[{i+1}/{len(movies)}] Processing: {movie['title']}...", end="\r")
+    
+    # Get Director (API Call)
+    director, genres = get_extended_details(movie['tmdb_id'])
+    
+    # Get Letterboxd Rating (Scrape)
+    lb_rating = get_letterboxd_rating(movie['title'], target_year)
+    
+    # Add to our final list
+    row = movie.copy()
+    row['director'] = director
+    row['genres'] = genres
+    row['lb_rating'] = lb_rating
+    final_data.append(row)
+    
+    # Polite sleep to avoid blocking
+    time.sleep(1) 
+
+# 4. Create DataFrame and Save
+df = pd.DataFrame(final_data)
+
+# Reorder columns for SQL friendliness
+df = df[['tmdb_id', 'title', 'year', 'director', 'genres', 'lb_rating', 'tmdb_rating', 'popularity', 'release_date']] if 'year' in df.columns else df
+
+csv_filename = f"japanese_films_{target_year}.csv"
+df.to_csv(csv_filename, index=False)
+
+print(f"\n\n✅ Done! Saved {len(df)} movies to '{csv_filename}'.")
+print(df.head())
