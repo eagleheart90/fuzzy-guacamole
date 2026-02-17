@@ -2,12 +2,11 @@ import streamlit as st
 import pandas as pd
 import joblib
 import os
+import plotly.express as px # type: ignore
 
 # --- 1. SMART PATH FINDING ---
 # This finds the absolute path to the folder where THIS script (app.py) is located.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Define the full paths to your model files
 model_path = os.path.join(BASE_DIR, 'asian_cinema_model.joblib')
 features_path = os.path.join(BASE_DIR, 'feature_cols.joblib')
 
@@ -22,88 +21,68 @@ if not os.path.exists(model_path) or not os.path.exists(features_path):
 model = joblib.load(model_path)
 feature_cols = joblib.load(features_path)
 
-# --- 3. DASHBOARD UI ---
-st.set_page_config(page_title="Asian Cinema AI", page_icon="🏮")
+# Load Data for Insights
+csv_path = os.path.join(BASE_DIR, 'asian_cinema_data.csv')
 
-st.title("🏮 Asian Cinema Rating Predictor")
-st.markdown("""
-This AI was trained on decades of Asian cinema data. 
-Adjust the sliders to see what rating the 'brain' predicts for a movie with these stats.
-""")
+@st.cache_data
+def load_data():
+    return pd.read_csv(csv_path) if os.path.exists(csv_path) else None
 
-# Sidebar for inputs
-st.sidebar.header("Movie Configuration")
+df = load_data()
 
-# Year and Runtime are major predictors from our ML analysis
+# --- 2. SIDEBAR INPUTS ---
+st.set_page_config(page_title="Asian Cinema AI", layout="wide")
+st.sidebar.title("🎬 Movie Specs")
+
+# Dynamic Director Search (Feature for the UI)
+if df is not None and 'director' in df.columns:
+    directors = sorted(df['director'].dropna().unique())
+    selected_dir = st.sidebar.selectbox("Director Search (Historical Reference)", ["None"] + directors)
+    if selected_dir != "None":
+        dir_avg = df[df['director'] == selected_dir]['lb_rating'].mean()
+        st.sidebar.info(f"💡 {selected_dir}'s average rating: {dir_avg:.2f}")
+
+# Main Predictor Inputs
 year = st.sidebar.slider("Release Year", 1950, 2026, 2024)
 runtime = st.sidebar.number_input("Runtime (Minutes)", 1, 300, 105)
 popularity = st.sidebar.slider("TMDb Popularity", 0.0, 500.0, 45.0)
 
-# Financials
-budget = st.sidebar.number_input("Budget (USD)", 0, 300000000, 5000000)
-revenue = st.sidebar.number_input("Revenue (USD)", 0, 1000000000, 12000000)
+# Genre Picker
+genre_cols = [c for c in feature_cols if c not in ['year', 'tmdb_popularity', 'runtime_min', 'budget', 'revenue']]
+selected_genre = st.sidebar.selectbox("Primary Genre", sorted(genre_cols))
 
-# Identify genre columns from our feature list
-genre_list = [c for c in feature_cols if c not in ['year', 'tmdb_popularity', 'runtime_min', 'budget', 'revenue']]
-selected_genre = st.sidebar.selectbox("Primary Genre", sorted(genre_list))
+# --- 3. MAIN DASHBOARD ---
+st.title("🏮 Asian Cinema Intelligent Dashboard")
 
-# --- 4. PREDICTION LOGIC ---
-if st.button("Generate AI Prediction"):
-    # Create a DataFrame with 1 row, all zeros
-    input_df = pd.DataFrame(0, index=[0], columns=feature_cols)
-    
-    # Fill in the basics
-    input_df['year'] = year
-    input_df['runtime_min'] = runtime
-    input_df['tmdb_popularity'] = popularity
-    input_df['budget'] = budget
-    input_df['revenue'] = revenue
-    
-    # Switch on the selected genre (One-Hot Encoding)
-    if selected_genre in input_df.columns:
-        input_df[selected_genre] = 1
+# Top Section: The Predictor
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.subheader("🤖 AI Rating Predictor")
+    if st.button("Calculate Score"):
+        input_df = pd.DataFrame(0, index=[0], columns=feature_cols)
+        input_df[['year', 'runtime_min', 'tmdb_popularity']] = [year, runtime, popularity]
+        if selected_genre in input_df.columns: input_df[selected_genre] = 1
         
-    # Get the prediction
-    prediction = model.predict(input_df)[0]
-    
-    # Display Results
+        prediction = model.predict(input_df)[0]
+        st.metric("Predicted Score", f"{prediction:.2f} / 5")
+        st.progress(min(prediction/5, 1.0))
+
+with col2:
+    st.subheader("📊 Genre Performance")
+    if df is not None:
+        # Show top genres by rating
+        genre_stats = df.groupby('genres')['lb_rating'].mean().sort_values(ascending=False).head(10).reset_index()
+        fig = px.bar(genre_stats, x='genres', y='lb_rating', color='lb_rating', 
+                     labels={'lb_rating': 'Avg Rating', 'genres': 'Genre'})
+        st.plotly_chart(fig, use_container_width=True)
+
+# Bottom Section: Historical Context
+if df is not None:
     st.divider()
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric("Predicted Letterboxd Score", f"{prediction:.2f} ⭐")
-        
-    with col2:
-        if prediction >= 4.0:
-            st.success("Verdict: A Potential Masterpiece")
-        elif prediction >= 3.3:
-            st.info("Verdict: Strong Critical Reception")
-        else:
-            st.warning("Verdict: Mixed or Niche Appeal")
-
-    st.progress(min(prediction / 5.0, 1.0))
-
-# --- 5. VISUAL ANALYTICS ---
-st.divider()
-st.subheader("📊 Global Insights: Genre vs. Rating")
-
-# We can load a small sample of the clean data to show trends
-@st.cache_data # This keeps the app fast by 'remembering' the data
-def load_stats_data():
-    # Look for the CSV in the parent directory since app.py is in /scripts
-    csv_path = os.path.join(os.path.dirname(BASE_DIR), 'asian_cinema_stats_CLEAN.csv')
-    if os.path.exists(csv_path):
-        return pd.read_csv(csv_path)
-    return None
-
-df_stats = load_stats_data()
-
-if df_stats is not None:
-    # Create a simple bar chart of average ratings by Genre
-    # Note: This is simplified for the dashboard
-    avg_ratings = df_stats.groupby('genres')['lb_rating'].mean().sort_values(ascending=False).head(10)
-    
-    st.bar_chart(avg_ratings)
-    st.caption("Average Letterboxd Rating by Genre (Top 10)")
-else:
-    st.info("💡 Tip: Place 'asian_cinema_stats_CLEAN.csv' in your main folder to see global trends here.")
+    st.subheader("📜 Historical Context: Movies from " + str(year))
+    year_movies = df[df['year'] == year][['title', 'director', 'lb_rating']].sort_values('lb_rating', ascending=False)
+    if not year_movies.empty:
+        st.table(year_movies.head(5))
+    else:
+        st.write("No historical data found for this exact year.")
