@@ -71,3 +71,8 @@ plt.ylabel('Model Predicted Rating')
 plt.grid(True, linestyle=':', alpha=0.6)
 plt.tight_layout()
 plt.show()
+
+import joblib
+joblib.dump(model, 'asian_cinema_model.joblib')
+joblib.dump(feature_cols, 'feature_cols.joblib')
+print("📦 Model and Features saved!")
