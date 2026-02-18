@@ -71,10 +71,25 @@ with col1:
 with col2:
     st.subheader("📊 Genre Performance")
     if df is not None:
-        # Show top genres by rating
-        genre_stats = df.groupby('genres')['lb_rating'].mean().sort_values(ascending=False).head(10).reset_index()
-        fig = px.bar(genre_stats, x='genres', y='lb_rating', color='lb_rating', 
-                     labels={'lb_rating': 'Avg Rating', 'genres': 'Genre'})
+        # 1. Handle movies with multiple genres (e.g., 'Action, Drama')
+        # This splits the strings and creates a separate row for each genre
+        df_exploded = df.assign(genre_list=df['genres'].str.split(', ')).explode('genre_list')
+        
+        # 2. Calculate average ratings for each individual genre
+        genre_stats = df_exploded.groupby('genre_list')['lb_rating'].mean().sort_values(ascending=False).head(10).reset_index()
+        
+        # 3. Create the interactive bar chart
+        fig = px.bar(
+            genre_stats, 
+            x='genre_list', 
+            y='lb_rating', 
+            color='lb_rating',
+            color_continuous_scale='Viridis',
+            labels={'lb_rating': 'Avg Rating', 'genre_list': 'Genre'}
+        )
+        
+        # Adjust the layout for better visibility in the dashboard
+        fig.update_layout(margin=dict(l=20, r=20, t=30, b=20))
         st.plotly_chart(fig, use_container_width=True)
 
 # Bottom Section: Historical Context
