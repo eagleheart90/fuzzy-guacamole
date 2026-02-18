@@ -2,11 +2,14 @@ import streamlit as st
 import pandas as pd
 import joblib
 import os
-import plotly.express as px # type: ignore
+import plotly.express as px
 
 # --- 1. SMART PATH FINDING ---
-# This finds the absolute path to the folder where THIS script (app.py) is located.
+# This finds the absolute path to the folder where this script is located
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Go up one level to find the CSV
+csv_path = os.path.join(os.path.dirname(BASE_DIR), 'asian_cinema_stats_CLEAN.csv')
+
 model_path = os.path.join(BASE_DIR, 'asian_cinema_model.joblib')
 features_path = os.path.join(BASE_DIR, 'feature_cols.joblib')
 
@@ -21,12 +24,15 @@ if not os.path.exists(model_path) or not os.path.exists(features_path):
 model = joblib.load(model_path)
 feature_cols = joblib.load(features_path)
 
-# Load Data for Insights
-csv_path = os.path.join(BASE_DIR, 'asian_cinema_data.csv')
 
 @st.cache_data
 def load_data():
-    return pd.read_csv(csv_path) if os.path.exists(csv_path) else None
+    if os.path.exists(csv_path):
+        return pd.read_csv(csv_path)
+    else:
+        st.warning("⚠️ Data file not found! The dashboard will have limited functionality.")
+        st.write(f"I looked for: `{csv_path}`")
+        return None
 
 df = load_data()
 
@@ -92,12 +98,38 @@ with col2:
         fig.update_layout(margin=dict(l=20, r=20, t=30, b=20))
         st.plotly_chart(fig, use_container_width=True)
 
-# Bottom Section: Historical Context
+# --- 5. HISTORICAL CONTEXT ---
 if df is not None:
     st.divider()
-    st.subheader("📜 Historical Context: Movies from " + str(year))
-    year_movies = df[df['year'] == year][['title', 'director', 'lb_rating']].sort_values('lb_rating', ascending=False)
+    st.subheader(f"📜 Historical Context: Movies from {year}")
+    
+    # Filter movies for the selected year
+    year_movies = df[df['year'] == year]
+    
     if not year_movies.empty:
-        st.table(year_movies.head(5))
+        # Dynamically choose which columns to show based on what's in the CSV
+        columns_to_show = ['title', 'lb_rating']
+        if 'director' in df.columns:
+            columns_to_show.insert(1, 'director')
+        elif 'production_companies' in df.columns:
+            # Optionally show studio if director is missing
+            columns_to_show.insert(1, 'production_companies')
+            
+        # Select and sort the available columns
+        display_df = year_movies[columns_to_show].sort_values('lb_rating', ascending=False)
+        
+        #Rename columns for better display
+        #Create dictionary for renaming
+        display_df = display_df.rename(columns={
+            'title': 'Title',
+            'lb_rating': 'Letterboxd Rating',
+            'production_companies': 'Studio',
+        })
+
+        st.dataframe(
+            display_df,
+            hide_index=True,
+            use_container_width=True
+        )
     else:
-        st.write("No historical data found for this exact year.")
+        st.write(f"No historical data found for {year}.")
