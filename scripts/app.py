@@ -6,9 +6,13 @@ import plotly.express as px
 
 # --- 1. SMART PATH FINDING ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(BASE_DIR, 'asian_cinema_model.joblib')
-features_path = os.path.join(BASE_DIR, 'feature_cols.joblib')
-csv_path = os.path.join(os.path.dirname(BASE_DIR), 'asian_cinema_stats_CLEAN.csv')
+
+ROOT_DIR = os.path.dirname(BASE_DIR)
+
+#File Paths
+model_path = os.path.join(ROOT_DIR, 'models', 'asian_cinema_model.joblib')
+features_path = os.path.join(ROOT_DIR, 'models', 'feature_cols.joblib')
+csv_path = os.path.join(ROOT_DIR, 'data', 'asian_cinema_stats_CLEAN.csv')
 
 # Load Model Files
 if not os.path.exists(model_path) or not os.path.exists(features_path):
