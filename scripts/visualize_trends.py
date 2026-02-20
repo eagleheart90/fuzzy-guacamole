@@ -2,16 +2,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-# 1. Load the clean data
+#Load data
 df = pd.read_csv('asian_cinema_stats_CLEAN.csv')
 
 # Pre-calculate decade for the charts
 df['decade'] = (df['year'] // 10) * 10
 
-# Set a professional style
 plt.style.use('ggplot')
 
-# --- GRAPH 1: RATING TRENDS OVER TIME ---
+# RATING TRENDS OVER TIME
+# Comparing cinephile (Letterboxd) vs general (TMDb) ratings
 plt.figure(figsize=(10, 6))
 
 # Aggregate ratings by decade
@@ -31,7 +31,7 @@ plt.tight_layout()
 plt.show() # This opens the window on your Mac
 
 
-# --- GRAPH 2: LANGUAGE DOMINANCE BY DECADE ---
+# LANGUAGE DISTRIBUTION BY DECADE
 plt.figure(figsize=(10, 6))
 
 # Count how many of each language appear per decade
@@ -47,19 +47,18 @@ plt.tight_layout()
 plt.show()
 
 
-# --- GRAPH 3: PROFIT VS RATING (SCATTER PLOT) ---
-# We only plot movies that have both a rating and profit data
+# RATING VS PROFIT CORRELATION
+# Removing outliers (> $2B) to maintain chart readability
 plot_df = df.dropna(subset=['lb_rating', 'profit']).copy()
 
-# 2. ELIMINATE OUTLIERS: Only keep profits below $2,000 million
+# eliminate outliers: Only keep profits below $2,000 million
 # This prevents one or two massive hits from ruining the scale
 limit_m = 2000 
 plot_df = plot_df[plot_df['profit'] < (limit_m * 1_000_000)]
 
-# 3. CONVERT PROFIT TO MILLIONS for easier reading
+# convert profit to millions for easier reading
 plot_df['profit_m'] = plot_df['profit'] / 1_000_000
 
-# --- GRAPH 3: REFINED SCATTER PLOT ---
 plt.figure(figsize=(12, 7))
 
 # Create the scatter plot
@@ -74,8 +73,7 @@ scatter = plt.scatter(
     s=80 # size of dots
 )
 
-# ADD BEST FIT LINE (Linear Regression)
-# Calculate the slope (m) and intercept (b)
+# Linear regression for trend visibility
 m, b = np.polyfit(plot_df['lb_rating'], plot_df['profit_m'], 1)
 # Create the line coordinates
 line_x = np.array([plot_df['lb_rating'].min(), plot_df['lb_rating'].max()])

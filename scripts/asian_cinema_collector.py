@@ -4,12 +4,12 @@ import time
 import re
 from letterboxdpy import movie as lb_movie
 
-# --- CONFIGURATION ---
-API_KEY = "TMDB_API_KEY_REMOVED"  # <--- PASTE YOUR KEY HERE
+# API Configuration
+API_KEY = "TMDB_API_KEY_REMOVED"
 BASE_URL = "https://api.themoviedb.org/3"
 START_YEAR = 1946
 END_YEAR = 2025
-MOVIES_PER_YEAR = 10  # Top 10 by popularity
+MOVIES_PER_YEAR = 10
 
 # Map user choice to TMDb ISO 639-1 codes
 LANGUAGE_MAP = {
@@ -21,19 +21,12 @@ LANGUAGE_MAP = {
 }
 
 def clean_slug(title):
-    """
-    Converts 'Seven Samurai' -> 'seven-samurai' for Letterboxd URL guessing.
-    """
-    # Lowercase, remove special chars (keep spaces/hyphens), strip whitespace
     slug = re.sub(r'[^a-zA-Z0-9\s-]', '', title.lower()).strip()
-    # Replace spaces with hyphens
     slug = re.sub(r'\s+', '-', slug)
     return slug
 
 def get_full_tmdb_details(movie_id):
-    """
-    Fetches the 'Deep' data: Budget, Revenue, Production Companies, etc.
-    """
+    """Fetches secondary financial and meta data from TMDb."""
     url = f"{BASE_URL}/movie/{movie_id}"
     params = {"api_key": API_KEY}
     
@@ -61,22 +54,13 @@ def get_full_tmdb_details(movie_id):
         return {}
 
 def get_letterboxd_rating(slug):
-    """
-    Uses letterboxdpy to scrape the specific Letterboxd rating.
-    Returns the string "None" if missing, for SQL friendliness.
-    """
+    """Scrapes Letterboxd scores using local slug guessing."""
     try:
-        # Initialize the library's Movie class
         movie_instance = lb_movie.Movie(slug)
-        
-        # Check if the rating attribute exists and is populated
         if hasattr(movie_instance, 'rating') and movie_instance.rating:
             return str(movie_instance.rating)
-            
     except Exception:
-        # If page not found or library error, fail silently
         pass
-        
     return "None"
 
 # --- MAIN EXECUTION ---
@@ -100,7 +84,6 @@ total_requests = (END_YEAR - START_YEAR + 1) * MOVIES_PER_YEAR
 counter = 0
 
 for year in range(START_YEAR, END_YEAR + 1):
-    # 1. Discover the hits of the year
     discover_url = f"{BASE_URL}/discover/movie"
     params = {
         "api_key": API_KEY,
@@ -110,21 +93,17 @@ for year in range(START_YEAR, END_YEAR + 1):
         "page": 1
     }
     
-    # We fetch slightly more than needed in case some are invalid
+    # fetch slightly more than needed in case some are invalid
     res = requests.get(discover_url, params=params).json()
     candidates = res.get('results', [])[:MOVIES_PER_YEAR]
     
     print(f"📅 {year} | Processing {len(candidates)} films...", end="\r")
     
     for film in candidates:
-        # 2. Get the "Deep" details from TMDb
         details = get_full_tmdb_details(film['id'])
-        
-        # 3. Get the Rating from Letterboxd
         slug = clean_slug(film['title'])
         lb_rating = get_letterboxd_rating(slug)
         
-        # 4. Build the Master Row
         row = {
             "year": year,
             "title": film['title'],
@@ -136,16 +115,9 @@ for year in range(START_YEAR, END_YEAR + 1):
             "vote_count": film['vote_count'],
             "release_date": film['release_date'],
             "overview": film['overview'],
-            # Merged details:
             **details
         }
-        
         all_movies.append(row)
-        
-        # Progress counter
-        counter += 1
-        
-        # Rate Limiting (Crucial for 800+ requests)
         time.sleep(0.5)
 
 # --- SAVE TO CSV ---

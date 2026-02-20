@@ -13,7 +13,7 @@ def validate_data(file_path):
     total_rows = len(df)
     print(f"Total Rows: {total_rows}\n")
 
-    # 1. Schema Integrity
+    # Validating existence of all core dataset features
     expected_columns = [
         'year', 'title', 'lb_rating', 'tmdb_rating', 'genres', 'runtime_min',
         'budget', 'revenue', 'original_language', 'production_companies',
@@ -28,10 +28,9 @@ def validate_data(file_path):
     else:
         print("✅ Schema Integrity: PASSED (All expected columns found)")
 
-    # 2. Boundary Checks
+    # Validating values against known realistic boundaries
     print("\n--- Boundary Checks ---")
     
-    # lb_rating: 0-5
     if 'lb_rating' in df.columns:
         # Handle NaN values for boundary checks
         valid_lb = df['lb_rating'].dropna()
@@ -58,7 +57,7 @@ def validate_data(file_path):
         else:
             print(f"✅ year: PASSED (All years within [1945, 2025])")
 
-    # 3. Consistency Check
+    # Ensuring mathematical consistency between related financial metrics
     print("\n--- Consistency Checks ---")
     if 'profit' in df.columns and 'revenue' in df.columns and 'budget' in df.columns:
         # Check if profit == revenue - budget
@@ -73,7 +72,7 @@ def validate_data(file_path):
     else:
         print("⚠️ Profit Consistency: SKIPPED (Missing required columns: 'profit', 'revenue', or 'budget')")
 
-    # 4. Completeness Check
+    # Missing values report by column
     print("\n--- Completeness Check (Missing Values %) ---")
     missing_report = df.isnull().mean() * 100
     for col, pct in missing_report.items():
