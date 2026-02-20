@@ -24,12 +24,11 @@ if not os.path.exists(final_path):
 else:
     df_final = pd.read_csv(final_path)
 
-# Find rows that exist in Original but NOT in Final
-# These are the movies we "dropped" during remediation
-missing_titles = df_orig[~df_orig['tmdb_id'].isin(df_final['tmdb_id'])]
+# Find rows that exist in Original but have missing ratings
+missing_titles = df_orig[df_orig['lb_rating'].isnull()]
 
-# Save the audit list
-missing_titles[['title', 'year', 'original_language']].to_csv(audit_path, index=False)
+# Save the audit list (keep all columns for recovery metadata)
+missing_titles.to_csv(audit_path, index=False)
 
 print(f"✅ Audit file created at {audit_path}")
 print(f"Total movies in 'backlog': {len(missing_titles)}")

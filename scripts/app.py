@@ -12,7 +12,7 @@ ROOT_DIR = os.path.dirname(BASE_DIR)
 #File Paths
 model_path = os.path.join(ROOT_DIR, 'models', 'asian_cinema_model.joblib')
 features_path = os.path.join(ROOT_DIR, 'models', 'feature_cols.joblib')
-csv_path = os.path.join(ROOT_DIR, 'data', 'asian_cinema_stats_CLEAN.csv')
+csv_path = os.path.join(ROOT_DIR, 'data', 'asian_cinema_RECOVERED.csv')
 
 # Load Model Files
 if not os.path.exists(model_path) or not os.path.exists(features_path):

@@ -4,8 +4,15 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error
 
+import os
+
+# 1. SMART PATH FINDING
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(BASE_DIR)
+
 # 1. Load Data
-df = pd.read_csv('asian_cinema_stats_CLEAN.csv')
+data_path = os.path.join(ROOT_DIR, 'data', 'asian_cinema_RECOVERED.csv')
+df = pd.read_csv(data_path)
 df = df.dropna(subset=['lb_rating', 'runtime_min', 'tmdb_popularity'])
 
 # 2. Encoding: Genres AND Languages
@@ -29,9 +36,11 @@ model = RandomForestRegressor(n_estimators=100, random_state=42)
 model.fit(X_train, y_train)
 
 # 5. Save the new "Brain"
-# This will overwrite your old files in the main folder
-joblib.dump(model, 'asian_cinema_model.joblib')
-joblib.dump(feature_cols, 'feature_cols.joblib')
+model_path = os.path.join(ROOT_DIR, 'models', 'asian_cinema_model.joblib')
+features_path = os.path.join(ROOT_DIR, 'models', 'feature_cols.joblib')
+
+joblib.dump(model, model_path)
+joblib.dump(feature_cols, features_path)
 
 print(f"✅ Success! Model updated with {len(lang_dummies.columns)} languages.")
 print(f"New Error Rate: {mean_absolute_error(y_test, model.predict(X_test)):.4f}")
